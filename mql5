@@ -1,0 +1,123 @@
+mql5
+//+------------------------------------------------------------------+
+//|                                             MA crossing bot MT5 |
+//|                                      Developer: Forex Robot Easy Team |
+//|                                      Website: forexroboteasy.com |
+//+------------------------------------------------------------------+
+
+// Global variables
+input int MA1_Period = 20; // Period of the first moving average
+input int MA2_Period = 50; // Period of the second moving average
+input int MA_Crossing_Filter = 5; // Number of bars to ignore after a crossing
+input double TP = 100.0; // Take Profit level
+input double SL = 50.0; // Stop Loss level
+
+//+------------------------------------------------------------------+
+//|                                       Moving Averages Crossing Detection |
+//+------------------------------------------------------------------+
+bool DetectMACrossing()
+{
+   double ma1 = iMA(NULL, 0, MA1_Period, 0, MODE_SMA, PRICE_CLOSE, 0); // Calculate the value of the first moving average
+   double ma2 = iMA(NULL, 0, MA2_Period, 0, MODE_SMA, PRICE_CLOSE, 0); // Calculate the value of the second moving average
+   
+   double ma1_prev = iMA(NULL, 0, MA1_Period, 0, MODE_SMA, PRICE_CLOSE, 1); // Calculate the previous value of the first moving average
+   double ma2_prev = iMA(NULL, 0, MA2_Period, 0, MODE_SMA, PRICE_CLOSE, 1); // Calculate the previous value of the second moving average
+   
+   bool isCrossing = (ma1 > ma2 && ma1_prev < ma2_prev) || (ma1 < ma2 && ma1_prev > ma2_prev); // Check for a crossing
+   
+   if (isCrossing)
+   {
+      for (int i = 1; i <= MA_Crossing_Filter; i++)
+      {
+         double ma1_recent = iMA(NULL, 0, MA1_Period, 0, MODE_SMA, PRICE_CLOSE, i); // Calculate the recent value of the first moving average
+         double ma2_recent = iMA(NULL, 0, MA2_Period, 0, MODE_SMA, PRICE_CLOSE, i); // Calculate the recent value of the second moving average
+         
+         bool isRecentCrossing = (ma1 > ma2 && ma1_recent < ma2_recent) || (ma1 < ma2 && ma1_recent > ma2_recent); // Check for a recent crossing
+         
+         if (isRecentCrossing)
+            return false; // Ignore the crossing if a recent one has occurred within the last x bars
+      }
+   }
+   
+   return isCrossing;
+}
+
+//+------------------------------------------------------------------+
+//|                                             Alerts |
+//+------------------------------------------------------------------+
+void SendAlert(string message)
+{
+   if (TimeDayOfWeek(TimeCurrent()) == 1) // Monday
+   {
+      datetime startAlertTime = D'09:00:00'; // Start time for alerts
+      datetime endAlertTime = D'15:00:00'; // End time for alerts
+      
+      if (TimeCurrent() >= startAlertTime && TimeCurrent() <= endAlertTime)
+      {
+         // Send terminal alert
+         Alert(message);
+         
+         // Send smartphone notification
+         SendNotification(message);
+      }
+   }
+}
+
+//+------------------------------------------------------------------+
+//|                                             Trading |
+//+------------------------------------------------------------------+
+void OpenTrade()
+{
+   if (DetectMACrossing())
+   {
+      // Place a buy or sell order based on the MA crossing
+      if (iMA(NULL, 0, MA1_Period, 0, MODE_SMA, PRICE_CLOSE, 0) > iMA(NULL, 0, MA2_Period, 0, MODE_SMA, PRICE_CLOSE, 0))
+      {
+         // Place a buy order
+         double entryPrice = Ask;
+         double stopLoss = entryPrice - SL * Point;
+         double takeProfit = entryPrice + TP * Point;
+         OrderSend(Symbol(), OP_BUY, 0.1, entryPrice, 10, stopLoss, takeProfit);
+      }
+      else if (iMA(NULL, 0, MA1_Period, 0, MODE_SMA, PRICE_CLOSE, 0) < iMA(NULL, 0, MA2_Period, 0, MODE_SMA, PRICE_CLOSE, 0))
+      {
+         // Place a sell order
+         double entryPrice = Bid;
+         double stopLoss = entryPrice + SL * Point;
+         double takeProfit = entryPrice - TP * Point;
+         OrderSend(Symbol(), OP_SELL, 0.1, entryPrice, 10, stopLoss, takeProfit);
+      }
+   }
+}
+
+//+------------------------------------------------------------------+
+//|                                           OnTick function |
+//+------------------------------------------------------------------+
+void OnTick()
+{
+   OpenTrade(); // Execute trades based on the MA crossing strategy
+}
+
+//+------------------------------------------------------------------+
+//|                                           OnInit function |
+//+------------------------------------------------------------------+
+void OnInit()
+{
+   // Set up necessary indicators and parameters
+   SetIndexBuffer(0, ma_buffer);
+   SetIndexStyle(0, DRAW_LINE);
+   SetIndexShift(0, 1);
+   SetIndexLabel(0, 'MA1');
+   SetIndexBuffer(1, ma_buffer);
+   SetIndexStyle(1, DRAW_LINE);
+   SetIndexShift(1, 1);
+   SetIndexLabel(1, 'MA2');
+   
+   // Enable alerts
+   EnableAlerts();
+   
+   // Enable notifications
+   EnableNotifications();
+}
+
+//+------------------------------------------------------------------+
